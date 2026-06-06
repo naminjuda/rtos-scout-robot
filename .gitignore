@@ -1,0 +1,27 @@
+# Build outputs
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.su
+
+# TrueSTUDIO / Eclipse local workspace files
+.metadata/
+*.log
+*.lck
+*.dep
+*.pbi
+*.pbw
+.ninja_deps
+.ninja_log
+language.settings.xml
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
