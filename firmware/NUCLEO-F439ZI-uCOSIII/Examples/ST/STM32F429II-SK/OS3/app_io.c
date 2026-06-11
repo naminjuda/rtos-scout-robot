@@ -8,7 +8,7 @@
 *   USART3 RX       : PD8
 *
 *   HC-SR04 TRIG    : PC0
-*   HC-SR04 ECHO    : PC1, �쟾�븬遺꾨같 �썑 �뿰寃�
+*   HC-SR04 ECHO    : PC1
 *   IR OUT          : PC2
 *
 *   Joystick VRx    : PA0, ADC1 Channel 0
