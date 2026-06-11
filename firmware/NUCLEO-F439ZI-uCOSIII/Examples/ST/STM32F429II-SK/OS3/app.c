@@ -8,6 +8,8 @@
 
 #include  <includes.h>
 #include  "app_core.h"
+#include  "app_cfg.h"
+#include  "app_io.h"
 #include  "stm32f4xx_rcc.h"
 #include  "stm32f4xx_gpio.h"
 #include  "stm32f4xx.h"
@@ -30,6 +32,9 @@ static  void  OutputLogTask      (void  *p_arg);
 
 static  void  Setup_Gpio         (void);
 static  void  App_HardwareStopAll(void);
+
+static  void  Sensor_PostObstacleEvent(void);
+static  void  Joystick_PostManualCommand(void);
 
 /*
 *********************************************************************************************************
@@ -69,6 +74,11 @@ static  const  APP_TASK_CFG  AppTaskTbl[] = {
 };
 
 #define  APP_TASK_TBL_SIZE  (sizeof(AppTaskTbl) / sizeof(AppTaskTbl[0]))
+
+static  volatile  int       g_last_distance_cm = -1;
+static  volatile  int       g_last_ir_obstacle = 0;
+static  volatile  uint16_t  g_last_joy_x = 0u;
+static  volatile  uint16_t  g_last_joy_y = 0u;
 
 /*
 *********************************************************************************************************
@@ -133,6 +143,8 @@ static  void  AppTaskStart (void *p_arg)
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
     CPU_IntDisMeasMaxCurReset();
 #endif
+
+    AppIO_Init();
 
     AppObjCreate();
     AppTaskCreate();
@@ -204,11 +216,15 @@ static  void  SensorTask (void *p_arg)
 
     (void)p_arg;
 
+    Log_Print("[TASK] SensorTask started\r\n");
+
     while (DEF_TRUE) {
         /*
          * TODO(developer sensor): Read distance/IR sensors and post sensor events.
          * Example: App_PostEvent(EVT_SENSOR_OBSTACLE_WARN, APP_EVENT_SRC_SENSOR, value);
          */
+    	Sensor_PostObstacleEvent();
+    	Joystick_PostManualCommand();
         OSTimeDlyHMSM(0u, 0u, 0u, 100u, OS_OPT_TIME_HMSM_STRICT, &err);
     }
 }
@@ -266,6 +282,182 @@ static  void  AppObjCreate (void)
     OS_ERR  err;
 
     App_CoreInit(&err);
+}
+
+/*
+*********************************************************************************************************
+*                                      SENSOR EVENT POST
+*********************************************************************************************************
+*/
+
+static  void  Sensor_PostObstacleEvent (void)
+{
+    int  distance;
+    int  ir;
+
+    distance = Ultrasonic_ReadDistanceCm();
+    ir       = IR_IsObstacleDetected();
+
+    g_last_distance_cm = distance;
+    g_last_ir_obstacle = ir;
+
+    Log_PrintNum("[SENSOR] distance=", distance, "cm, ");
+    Log_PrintNum("ir=", ir, "\r\n");
+
+    /*
+
+     * 30cm -> EVT_SENSOR_CLEAR
+     * 15~30cm -> EVT_SENSOR_OBSTACLE_WARN
+     * 15cm -> EVT_SENSOR_OBSTACLE_CRITICAL
+     */
+    if (distance < 0) {
+        Log_Print("[SENSOR] ultrasonic timeout\r\n");
+    }
+    else if (distance <= DIST_CRITICAL_CM) {
+        Log_Print("[POST] EVT_SENSOR_OBSTACLE_CRITICAL\r\n");
+        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_CRITICAL, APP_EVENT_SRC_SENSOR, distance);
+    }
+    else if (distance < DIST_WARN_CM) {
+        Log_Print("[POST] EVT_SENSOR_OBSTACLE_WARN\r\n");
+        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_WARN, APP_EVENT_SRC_SENSOR, distance);
+    }
+    else {
+        Log_Print("[POST] EVT_SENSOR_CLEAR\r\n");
+        (void)App_PostEvent(EVT_SENSOR_CLEAR, APP_EVENT_SRC_SENSOR, distance);
+    }
+
+    if (ir == 1) {
+        Log_Print("[POST] EVT_IR_OBSTACLE\r\n");
+        (void)App_PostEvent(EVT_IR_OBSTACLE, APP_EVENT_SRC_SENSOR, 0u);
+    }
+    Log_Print("\r\n");
+}
+
+/*
+*********************************************************************************************************
+*                                  JOYSTICK MANUAL COMMAND
+*
+* MANUAL_MODE -> joystick
+*
+* VRx:
+*    -> LEFT
+*    -> RIGHT
+*
+* VRy:
+*    -> FORWARD
+*
+*   LEFT/RIGHT , center -> CENTER
+*   FORWARD , center    -> STOP
+*
+*********************************************************************************************************
+*/
+
+typedef enum {
+    JOY_DIR_CENTER = 0,
+    JOY_DIR_LEFT,
+    JOY_DIR_RIGHT,
+    JOY_DIR_FORWARD
+} JOY_DIR;
+
+static  void  Joystick_PostManualCommand(void)
+{
+    uint16_t     x;
+    uint16_t     y;
+    JOY_DIR      now_dir;
+    SystemState  state;
+
+    static  JOY_DIR     last_dir = JOY_DIR_CENTER;
+    static  JOY_DIR     candidate_dir = JOY_DIR_CENTER;
+    static  CPU_INT08U  stable_count = 0u;
+
+    x = Joystick_ReadX();
+    y = Joystick_ReadY();
+
+    g_last_joy_x = x;
+    g_last_joy_y = y;
+
+/*
+    state = App_GetState();
+
+    if (state != STATE_MANUAL_MODE) {
+        last_dir = JOY_DIR_CENTER;
+        candidate_dir = JOY_DIR_CENTER;
+        stable_count = 0u;
+        return;
+    }
+*/
+
+    if (x < JOY_ADC_LOW_TH) {
+        now_dir = JOY_DIR_LEFT;
+    }
+    else if (x > JOY_ADC_HIGH_TH) {
+        now_dir = JOY_DIR_RIGHT;
+    }
+    else if (y > JOY_ADC_HIGH_TH) {
+        now_dir = JOY_DIR_FORWARD;
+    }
+    else {
+        now_dir = JOY_DIR_CENTER;
+    }
+
+    if (now_dir == candidate_dir) {
+        if (stable_count < JOY_STABLE_COUNT) {
+            stable_count++;
+        }
+    }
+    else {
+        candidate_dir = now_dir;
+        stable_count = 0u;
+        return;
+    }
+
+    if (stable_count < JOY_STABLE_COUNT) {
+        return;
+    }
+
+    if (now_dir == last_dir) {
+        return;
+    }
+
+    if (now_dir == JOY_DIR_LEFT) {
+        (void)App_PostEvent(EVT_CMD_LEFT,
+            APP_EVENT_SRC_COMMAND,
+            0u);
+
+        Log_Print("[JOY] LEFT -> EVT_CMD_LEFT\r\n");
+    }
+    else if (now_dir == JOY_DIR_RIGHT) {
+        (void)App_PostEvent(EVT_CMD_RIGHT,
+            APP_EVENT_SRC_COMMAND,
+            0u);
+
+        Log_Print("[JOY] RIGHT -> EVT_CMD_RIGHT\r\n");
+    }
+    else if (now_dir == JOY_DIR_FORWARD) {
+        (void)App_PostEvent(EVT_CMD_FORWARD,
+            APP_EVENT_SRC_COMMAND,
+            0u);
+
+        Log_Print("[JOY] FORWARD -> EVT_CMD_FORWARD\r\n");
+    }
+    else {
+        if ((last_dir == JOY_DIR_LEFT) || (last_dir == JOY_DIR_RIGHT)) {
+            (void)App_PostEvent(EVT_CMD_CENTER,
+                APP_EVENT_SRC_COMMAND,
+                0u);
+
+            Log_Print("[JOY] CENTER -> EVT_CMD_CENTER\r\n");
+        }
+        else if (last_dir == JOY_DIR_FORWARD) {
+            (void)App_PostEvent(EVT_CMD_STOP,
+                APP_EVENT_SRC_COMMAND,
+                0u);
+
+            Log_Print("[JOY] RELEASE FORWARD -> EVT_CMD_STOP\r\n");
+        }
+    }
+
+    last_dir = now_dir;
 }
 
 /*
