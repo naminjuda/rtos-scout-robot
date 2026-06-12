@@ -97,6 +97,39 @@ CPU_BOOLEAN  App_PostEvent (EventType type, AppEventSource source, CPU_INT32U da
     return (DEF_OK);
 }
 
+CPU_INT16U  App_FlushPendingEvents (void)
+{
+    AppEvent     *p_pool_event;
+    OS_MSG_SIZE   msg_size;
+    OS_ERR        err;
+    CPU_INT16U    flushed;
+
+    flushed = 0u;
+
+    while (DEF_TRUE) {
+        p_pool_event = (AppEvent *)OSQPend(&AppEventQ,
+                                           0u,
+                                           OS_OPT_PEND_NON_BLOCKING,
+                                           &msg_size,
+                                           (CPU_TS *)0,
+                                           &err);
+
+        if ((err != OS_ERR_NONE) || (p_pool_event == (AppEvent *)0)) {
+            break;
+        }
+
+        OSQPost(&AppFreeEventQ,
+                (void *)p_pool_event,
+                (OS_MSG_SIZE)sizeof(AppEvent),
+                OS_OPT_POST_FIFO,
+                &err);
+
+        flushed++;
+    }
+
+    return flushed;
+}
+
 void  App_WaitEvent (AppEvent *p_event, OS_ERR *p_err)
 {
     AppEvent     *p_pool_event;
@@ -222,10 +255,17 @@ CPU_BOOLEAN  App_RunStateMachineSelfTest (void)
 
 static  SystemState  App_NextState (SystemState state, EventType event)
 {
+    /*
+     * Emergency stop has the highest priority.
+     * Any state + EVT_EMERGENCY_STOP -> STATE_EMERGENCY_STOP
+     */
     if (event == EVT_EMERGENCY_STOP) {
         return (STATE_EMERGENCY_STOP);
     }
 
+    /*
+     * While emergency stop is active, ignore every event except RESET.
+     */
     if (state == STATE_EMERGENCY_STOP) {
         if (event == EVT_CMD_RESET) {
             return (STATE_IDLE);
@@ -233,20 +273,45 @@ static  SystemState  App_NextState (SystemState state, EventType event)
         return (STATE_EMERGENCY_STOP);
     }
 
+    /*
+     * Common command events.
+     * These commands should work from most normal states.
+     */
+    if (event == EVT_CMD_RESET) {
+        return (STATE_IDLE);
+    }
+
+    if (event == EVT_CMD_STOP) {
+        return (STATE_IDLE);
+    }
+
+    if (event == EVT_CMD_AUTO) {
+        return (STATE_AUTO_MODE);
+    }
+
+    if (event == EVT_CMD_MANUAL) {
+        return (STATE_MANUAL_MODE);
+    }
+
     switch (state) {
         case STATE_IDLE:
-            if (event == EVT_CMD_AUTO) {
-                return (STATE_AUTO_MODE);
-            }
-            if (event == EVT_CMD_MANUAL) {
-                return (STATE_MANUAL_MODE);
-            }
+            /*
+             * AUTO / MANUAL / RESET are already handled above.
+             */
+            break;
+
+        case STATE_MANUAL_MODE:
+            /*
+             * LEFT / RIGHT / CENTER / FORWARD / STOP keep manual mode.
+             * Actual servo/output action is handled by C part CommandTask/OutputLogTask.
+             */
             break;
 
         case STATE_AUTO_MODE:
             if (event == EVT_SENSOR_OBSTACLE_WARN) {
                 return (STATE_OBSTACLE_WARNING);
             }
+
             if ((event == EVT_SENSOR_OBSTACLE_CRITICAL) ||
                 (event == EVT_IR_OBSTACLE)) {
                 return (STATE_AUTO_STOP);
@@ -257,6 +322,7 @@ static  SystemState  App_NextState (SystemState state, EventType event)
             if (event == EVT_SENSOR_CLEAR) {
                 return (STATE_AUTO_MODE);
             }
+
             if ((event == EVT_SENSOR_OBSTACLE_CRITICAL) ||
                 (event == EVT_IR_OBSTACLE)) {
                 return (STATE_AUTO_STOP);
@@ -264,9 +330,15 @@ static  SystemState  App_NextState (SystemState state, EventType event)
             break;
 
         case STATE_AUTO_STOP:
-            if (event == EVT_CMD_RESET) {
-                return (STATE_IDLE);
-            }
+            /*
+             * RESET / AUTO / MANUAL are already handled above.
+             */
+            break;
+
+        case STATE_RECOVERY_WAIT:
+            /*
+             * RESET / AUTO / MANUAL are already handled above.
+             */
             break;
 
         default:

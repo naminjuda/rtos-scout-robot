@@ -21,6 +21,7 @@
 */
 
 void      AppIO_Init                 (void);
+int       USART3_ReadCharNonBlocking (char *p_char);
 
 /*
 *********************************************************************************************************
@@ -53,6 +54,7 @@ uint16_t  Joystick_ReadY             (void);
 
 void      Servo_SetAngle             (int angle);
 void      RGB_SetState               (SystemState state);
+void      RGB_SetForwardState       (void);
 void      Buzzer_SetState            (SystemState state);
 
 /*

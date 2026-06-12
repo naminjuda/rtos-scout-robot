@@ -121,23 +121,23 @@
 *********************************************************************************************************
 */
 
-// 거리 기준값
+/* Distance thresholds */
 #define  DIST_WARN_CM                  30
 #define  DIST_CRITICAL_CM              15
 #define  SENSOR_TASK_PERIOD_MS         100u
 #define  ULTRA_TIMEOUT_US              30000u
 
-// HC-SR04 초음파 센서
+/* HC-SR04 ultrasonic sensor */
 #define  ULTRA_PORT                    GPIOF
 #define  ULTRA_TRIG_PIN                GPIO_Pin_15
 #define  ULTRA_ECHO_PIN                GPIO_Pin_14
 
-// IR 장애물 센서
+/* IR obstacle sensor */
 #define  IR_PORT                       GPIOF
 #define  IR_PIN                        GPIO_Pin_13
 #define  IR_DETECTED_LEVEL             Bit_RESET
 
-// 조이스틱
+/* Joystick ADC */
 #define  JOY_ADC_PORT                  GPIOC
 #define  JOY_VRX_PIN                   GPIO_Pin_0
 #define  JOY_VRY_PIN                   GPIO_Pin_3
@@ -145,11 +145,53 @@
 #define  JOY_VRY_ADC_CHANNEL           ADC_Channel_13
 
 /*
- * 12-bit ADC 범위: 0 ~ 4095
- * 중앙값은 보통 약 2048 근처.
+ * 12-bit ADC range: 0 ~ 4095
+ * Center value is usually around 2048.
  */
 #define  JOY_ADC_LOW_TH                1400u
 #define  JOY_ADC_HIGH_TH               2600u
 #define  JOY_STABLE_COUNT              2u
 
+/*
+*********************************************************************************************************
+*                                      C PART OUTPUT CONFIG
+*********************************************************************************************************
+*/
+
+#define  SERVO_LEFT_ANGLE              0
+#define  SERVO_CENTER_ANGLE            65
+#define  SERVO_RIGHT_ANGLE             135
+
+/* Servo PWM: Arduino D12 = PA6 = TIM3 CH1 */
+#define  SERVO_GPIO_PORT               GPIOA
+#define  SERVO_GPIO_PIN                GPIO_Pin_6
+#define  SERVO_GPIO_PIN_SOURCE         GPIO_PinSource6
+#define  SERVO_GPIO_AF                 GPIO_AF_TIM3
+#define  SERVO_TIM                     TIM3
+#define  SERVO_TIM_RCC                 RCC_APB1Periph_TIM3
+#define  SERVO_TIM_PERIOD              20000u
+#define  SERVO_PULSE_MIN_US            500u
+#define  SERVO_PULSE_MAX_US            2500u
+
+/* Active buzzer: PE9, not connected yet */
+#define  BUZZER_GPIO_PORT              GPIOE
+#define  BUZZER_GPIO_PIN               GPIO_Pin_9
+
+/*
+ * RGB LED module on Arduino digital header.
+ * Common cathode type: R G B -
+ *
+ * R -> D3  = PE13
+ * G -> D4  = PE14
+ * B -> D5  = PE11
+ * - -> GND
+ */
+#define  RGB_RED_GPIO_PORT             GPIOE
+#define  RGB_RED_GPIO_PIN              GPIO_Pin_13
+
+#define  RGB_GREEN_GPIO_PORT           GPIOF
+#define  RGB_GREEN_GPIO_PIN            GPIO_Pin_14
+
+#define  RGB_BLUE_GPIO_PORT            GPIOE
+#define  RGB_BLUE_GPIO_PIN             GPIO_Pin_11
 #endif

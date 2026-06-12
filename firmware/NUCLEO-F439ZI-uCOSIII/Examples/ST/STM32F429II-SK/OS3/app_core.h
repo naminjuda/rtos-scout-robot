@@ -55,6 +55,7 @@ void         App_CoreInit             (OS_ERR       *p_err);
 CPU_BOOLEAN  App_PostEvent            (EventType     type,
                                        AppEventSource source,
                                        CPU_INT32U     data);
+CPU_INT16U   App_FlushPendingEvents   (void);
 void         App_WaitEvent            (AppEvent     *p_event,
                                        OS_ERR       *p_err);
 void         App_SetState             (SystemState   state);

@@ -28,6 +28,7 @@
 #include  "stm32f4xx_gpio.h"
 #include  "stm32f4xx_usart.h"
 #include  "stm32f4xx_adc.h"
+#include  "stm32f4xx_tim.h"
 #include  "stm32f4xx.h"
 
 #define APP_CPU_CLOCK_HZ              180000000u
@@ -48,6 +49,8 @@
 static  void      Setup_Usart3        (void);
 static  void      SensorGPIO_Init     (void);
 static  void      JoystickADC_Init    (void);
+static  void      OutputGPIO_Init     (void);
+static  void      ServoPWM_Init       (void);
 
 static  void      DWT_DelayInit       (void);
 static  void      DelayUs             (uint32_t us);
@@ -69,10 +72,15 @@ void  AppIO_Init (void)
     SensorGPIO_Init();
     JoystickADC_Init();
     DWT_DelayInit();
+    OutputGPIO_Init();
+    ServoPWM_Init();
+
+    RGB_SetState(STATE_IDLE);
+    Buzzer_SetState(STATE_IDLE);
+    Servo_SetAngle(SERVO_CENTER_ANGLE);
 
     Log_Print("[INIT] AppIO init done\r\n");
 }
-
 /*
 *********************************************************************************************************
 *                                      USART3 SETUP / LOG
@@ -110,6 +118,20 @@ static  void  Setup_Usart3 (void)
 
     USART_Init(USART3, &usart_init);
     USART_Cmd(USART3, ENABLE);
+}
+
+int  USART3_ReadCharNonBlocking (char *p_char)
+{
+    if (p_char == (char *)0) {
+        return 0;
+    }
+
+    if (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) == RESET) {
+        return 0;
+    }
+
+    *p_char = (char)(USART_ReceiveData(USART3) & 0xFFu);
+    return 1;
 }
 
 static  void  UsartPutChar (char c)
@@ -392,21 +414,268 @@ int  IR_IsObstacleDetected (void)
 
 /*
 *********************************************************************************************************
-*                                      OUTPUT PLACEHOLDERS
+*                                      OUTPUT CONTROL
 *********************************************************************************************************
 */
 
+static  void  RGB_AllOff (void)
+{
+    GPIO_ResetBits(RGB_RED_GPIO_PORT, RGB_RED_GPIO_PIN);
+    GPIO_ResetBits(RGB_GREEN_GPIO_PORT, RGB_GREEN_GPIO_PIN);
+    GPIO_ResetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
+}
+
+static  void  RGB_RedOn (void)
+{
+    GPIO_SetBits(RGB_RED_GPIO_PORT, RGB_RED_GPIO_PIN);
+}
+
+static  void  RGB_GreenOn (void)
+{
+    GPIO_SetBits(RGB_GREEN_GPIO_PORT, RGB_GREEN_GPIO_PIN);
+}
+
+static  void  RGB_BlueOn (void)
+{
+    GPIO_SetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
+}
+
+static  void  OutputGPIO_Init (void)
+{
+    GPIO_InitTypeDef  gpio_init;
+
+    /*
+     * RGB:
+     * R -> D3 = PE13
+     * G -> D4 = PF14
+     * B -> D5 = PE11
+     *
+     * Buzzer:
+     * PE9
+     */
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOF, ENABLE);
+
+    gpio_init.GPIO_Mode  = GPIO_Mode_OUT;
+    gpio_init.GPIO_OType = GPIO_OType_PP;
+    gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
+    gpio_init.GPIO_PuPd  = GPIO_PuPd_NOPULL;
+
+    /* GPIOE: Red, Blue, Buzzer */
+    gpio_init.GPIO_Pin = RGB_RED_GPIO_PIN |
+                         RGB_BLUE_GPIO_PIN |
+                         BUZZER_GPIO_PIN;
+    GPIO_Init(GPIOE, &gpio_init);
+
+    /* GPIOF: Green */
+    gpio_init.GPIO_Pin = RGB_GREEN_GPIO_PIN;
+    GPIO_Init(GPIOF, &gpio_init);
+
+    GPIO_ResetBits(RGB_RED_GPIO_PORT, RGB_RED_GPIO_PIN);
+    GPIO_ResetBits(RGB_GREEN_GPIO_PORT, RGB_GREEN_GPIO_PIN);
+    GPIO_ResetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
+    GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+}
+
+static  void  ServoPWM_Init (void)
+{
+    GPIO_InitTypeDef        gpio_init;
+    TIM_TimeBaseInitTypeDef tim_init;
+    TIM_OCInitTypeDef       oc_init;
+
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    RCC_APB1PeriphClockCmd(SERVO_TIM_RCC, ENABLE);
+
+    GPIO_PinAFConfig(SERVO_GPIO_PORT, SERVO_GPIO_PIN_SOURCE, SERVO_GPIO_AF);
+
+    gpio_init.GPIO_Pin   = SERVO_GPIO_PIN;
+    gpio_init.GPIO_Mode  = GPIO_Mode_AF;
+    gpio_init.GPIO_OType = GPIO_OType_PP;
+    gpio_init.GPIO_PuPd  = GPIO_PuPd_NOPULL;
+    gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(SERVO_GPIO_PORT, &gpio_init);
+
+    /*
+     * APB1 timer clock is treated as about 90MHz here.
+     * Prescaler 90-1 makes 1MHz timer tick, so 1 count = 1us.
+     * Period 20000-1 makes 20ms PWM period = 50Hz servo PWM.
+     */
+    TIM_TimeBaseStructInit(&tim_init);
+    tim_init.TIM_Prescaler     = 90u - 1u;
+    tim_init.TIM_CounterMode   = TIM_CounterMode_Up;
+    tim_init.TIM_Period        = SERVO_TIM_PERIOD - 1u;
+    tim_init.TIM_ClockDivision = TIM_CKD_DIV1;
+    TIM_TimeBaseInit(SERVO_TIM, &tim_init);
+
+    TIM_OCStructInit(&oc_init);
+    oc_init.TIM_OCMode      = TIM_OCMode_PWM1;
+    oc_init.TIM_OutputState = TIM_OutputState_Enable;
+    oc_init.TIM_Pulse       = 1500u;
+    oc_init.TIM_OCPolarity  = TIM_OCPolarity_High;
+    TIM_OC1Init(SERVO_TIM, &oc_init);
+    TIM_OC1PreloadConfig(SERVO_TIM, TIM_OCPreload_Enable);
+    TIM_ARRPreloadConfig(SERVO_TIM, ENABLE);
+    TIM_Cmd(SERVO_TIM, ENABLE);
+}
+
 void  Servo_SetAngle (int angle)
 {
-    (void)angle;
+    uint32_t pulse;
+
+    if (angle < 0) {
+        angle = 0;
+    }
+
+    if (angle > 180) {
+        angle = 180;
+    }
+
+    pulse = SERVO_PULSE_MIN_US +
+            (((uint32_t)angle * (SERVO_PULSE_MAX_US - SERVO_PULSE_MIN_US)) / 180u);
+
+    TIM_SetCompare1(SERVO_TIM, pulse);
 }
 
 void  RGB_SetState (SystemState state)
 {
-    (void)state;
+    static CPU_INT08U tick = 0u;
+
+    tick++;
+
+    RGB_AllOff();
+
+    switch (state) {
+        case STATE_IDLE:
+            RGB_BlueOn();
+            break;
+
+        case STATE_MANUAL_MODE:
+            RGB_GreenOn();
+            break;
+
+        case STATE_AUTO_MODE:
+            /*
+             * Green slow blink.
+             */
+            if ((tick % 6u) < 3u) {
+                RGB_GreenOn();
+            }
+            break;
+
+        case STATE_OBSTACLE_WARNING:
+            /*
+            * Yellow/orange blink.
+            * Green LED is usually brighter than red, so green is turned on less often.
+            */
+            if ((tick % 6u) < 3u) {
+                RGB_RedOn();
+
+                if ((tick % 6u) == 0u) {
+                    RGB_GreenOn();
+                }
+            }
+            break;
+            
+        case STATE_AUTO_STOP:
+            /*
+             * Red blink.
+             */
+            if ((tick % 4u) < 2u) {
+                RGB_RedOn();
+            }
+            break;
+
+        case STATE_EMERGENCY_STOP:
+            /*
+             * Red fast blink.
+             */
+            if ((tick % 2u) == 0u) {
+                RGB_RedOn();
+            }
+            break;
+
+        case STATE_RECOVERY_WAIT:
+            /*
+             * Blue/purple blink.
+             */
+            if ((tick % 4u) < 2u) {
+                RGB_BlueOn();
+                RGB_RedOn();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+void  RGB_SetForwardState (void)
+{
+    static CPU_INT08U tick = 0u;
+
+    tick++;
+
+    RGB_AllOff();
+
+    /*
+     * Forward display: cyan blink = Green + Blue.
+     * It means "moving forward" without a real DC motor.
+     */
+    if ((tick % 2u) == 0u) {
+        RGB_GreenOn();
+        RGB_BlueOn();
+    }
 }
 
 void  Buzzer_SetState (SystemState state)
 {
-    (void)state;
+    static CPU_INT08U tick = 0u;
+
+    tick++;
+
+    switch (state) {
+        case STATE_OBSTACLE_WARNING:
+            /*
+             * Short beep: briefly ON once per cycle.
+             */
+            if ((tick % 10u) == 0u) {
+                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            } else {
+                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            }
+            break;
+
+        case STATE_AUTO_STOP:
+            /*
+             * Repeated beep.
+             */
+            if ((tick % 6u) < 3u) {
+                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            } else {
+                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            }
+            break;
+
+        case STATE_EMERGENCY_STOP:
+            /*
+             * Continuous sound.
+             */
+            GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            break;
+
+        case STATE_RECOVERY_WAIT:
+            /*
+             * Optional short beep.
+             */
+            if ((tick % 20u) == 0u) {
+                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            } else {
+                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            }
+            break;
+
+        default:
+            GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            break;
+    }
 }

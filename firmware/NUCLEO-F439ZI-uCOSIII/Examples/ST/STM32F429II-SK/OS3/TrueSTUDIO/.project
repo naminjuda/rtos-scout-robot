@@ -65,6 +65,16 @@
 			<locationURI>PARENT-1-PROJECT_LOC/app_core.c</locationURI>
 		</link>
 		<link>
+			<name>APP/app_io.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/app_io.c</locationURI>
+		</link>
+		<link>
+			<name>APP/app_io.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/app_io.h</locationURI>
+		</link>
+		<link>
 			<name>APP/app_core.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/app_core.h</locationURI>
