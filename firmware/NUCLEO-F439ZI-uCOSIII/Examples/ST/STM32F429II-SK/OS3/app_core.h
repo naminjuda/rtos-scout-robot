@@ -9,6 +9,7 @@ extern "C" {
 
 typedef  enum  event_type {
     EVT_CMD_AUTO = 0,
+    EVT_CMD_MODE_TOGGLE,
     EVT_CMD_MANUAL,
     EVT_CMD_FORWARD,
     EVT_CMD_LEFT,
@@ -28,6 +29,7 @@ typedef  enum  event_type {
 
 typedef  enum  app_event_source {
     APP_EVENT_SRC_COMMAND = 0,
+    APP_EVENT_SRC_BUTTON,
     APP_EVENT_SRC_SENSOR,
     APP_EVENT_SRC_EMERGENCY,
     APP_EVENT_SRC_TEST

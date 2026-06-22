@@ -48,6 +48,7 @@
 
 static  void      Setup_Usart3        (void);
 static  void      SensorGPIO_Init     (void);
+static  void      ButtonGPIO_Init     (void);
 static  void      JoystickADC_Init    (void);
 static  void      OutputGPIO_Init     (void);
 static  void      ServoPWM_Init       (void);
@@ -70,6 +71,7 @@ void  AppIO_Init (void)
 {
     Setup_Usart3();
     SensorGPIO_Init();
+    ButtonGPIO_Init();
     JoystickADC_Init();
     DWT_DelayInit();
     OutputGPIO_Init();
@@ -212,31 +214,35 @@ static  void  SensorGPIO_Init (void)
 {
     GPIO_InitTypeDef  gpio_init;
 
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOF, ENABLE);
+    RCC_AHB1PeriphClockCmd(ULTRA_TRIG_GPIO_CLK |
+                           ULTRA_ECHO_GPIO_CLK |
+                           IR_GPIO_CLK,
+                           ENABLE);
+
     /*
-     * HC-SR04 TRIG: output
+     * HC-SR04 TRIG: D2 = PF15 output
      */
     gpio_init.GPIO_Mode  = GPIO_Mode_OUT;
     gpio_init.GPIO_OType = GPIO_OType_PP;
     gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
     gpio_init.GPIO_PuPd  = GPIO_PuPd_DOWN;
     gpio_init.GPIO_Pin   = ULTRA_TRIG_PIN;
-    GPIO_Init(ULTRA_PORT, &gpio_init);
+    GPIO_Init(ULTRA_TRIG_GPIO_PORT, &gpio_init);
 
-    GPIO_ResetBits(ULTRA_PORT, ULTRA_TRIG_PIN);
+    GPIO_ResetBits(ULTRA_TRIG_GPIO_PORT, ULTRA_TRIG_PIN);
 
     /*
-     * HC-SR04 ECHO: input
+     * HC-SR04 ECHO: A5 = PF10 input
      */
     gpio_init.GPIO_Mode  = GPIO_Mode_IN;
     gpio_init.GPIO_OType = GPIO_OType_PP;
     gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
     gpio_init.GPIO_PuPd  = GPIO_PuPd_DOWN;
     gpio_init.GPIO_Pin   = ULTRA_ECHO_PIN;
-    GPIO_Init(ULTRA_PORT, &gpio_init);
+    GPIO_Init(ULTRA_ECHO_GPIO_PORT, &gpio_init);
 
     /*
-     * IR OUT: input pull-up
+     * IR OUT: D7 = PF13 input pull-up
      */
     gpio_init.GPIO_Mode  = GPIO_Mode_IN;
     gpio_init.GPIO_OType = GPIO_OType_PP;
@@ -244,6 +250,41 @@ static  void  SensorGPIO_Init (void)
     gpio_init.GPIO_PuPd  = GPIO_PuPd_UP;
     gpio_init.GPIO_Pin   = IR_PIN;
     GPIO_Init(IR_PORT, &gpio_init);
+}
+
+
+/*
+*********************************************************************************************************
+*                                      BUTTON GPIO INIT
+*
+* MODE button
+* EMERGENCY button
+* RESET button
+*********************************************************************************************************
+*/
+
+static  void  ButtonGPIO_Init (void)
+{
+    GPIO_InitTypeDef  gpio_init;
+
+    RCC_AHB1PeriphClockCmd(BUTTON_MODE_GPIO_CLK |
+                           BUTTON_EMERGENCY_GPIO_CLK |
+                           BUTTON_RESET_GPIO_CLK,
+                           ENABLE);
+
+    gpio_init.GPIO_Mode  = GPIO_Mode_IN;
+    gpio_init.GPIO_OType = GPIO_OType_PP;
+    gpio_init.GPIO_Speed = GPIO_Speed_50MHz;
+    gpio_init.GPIO_PuPd  = GPIO_PuPd_UP;
+
+    gpio_init.GPIO_Pin = BUTTON_MODE_GPIO_PIN;
+    GPIO_Init(BUTTON_MODE_GPIO_PORT, &gpio_init);
+
+    gpio_init.GPIO_Pin = BUTTON_EMERGENCY_GPIO_PIN;
+    GPIO_Init(BUTTON_EMERGENCY_GPIO_PORT, &gpio_init);
+
+    gpio_init.GPIO_Pin = BUTTON_RESET_GPIO_PIN;
+    GPIO_Init(BUTTON_RESET_GPIO_PORT, &gpio_init);
 }
 
 /*
@@ -363,17 +404,17 @@ int  Ultrasonic_ReadDistanceCm (void)
     uint32_t  echo_end;
     uint32_t  echo_width;
 
-    GPIO_ResetBits(ULTRA_PORT, ULTRA_TRIG_PIN);
+    GPIO_ResetBits(ULTRA_TRIG_GPIO_PORT, ULTRA_TRIG_PIN);
     DelayUs(2u);
 
-    GPIO_SetBits(ULTRA_PORT, ULTRA_TRIG_PIN);
+    GPIO_SetBits(ULTRA_TRIG_GPIO_PORT, ULTRA_TRIG_PIN);
     DelayUs(10u);
 
-    GPIO_ResetBits(ULTRA_PORT, ULTRA_TRIG_PIN);
+    GPIO_ResetBits(ULTRA_TRIG_GPIO_PORT, ULTRA_TRIG_PIN);
 
     start_time = GetMicros();
 
-    while (GPIO_ReadInputDataBit(ULTRA_PORT, ULTRA_ECHO_PIN) == Bit_RESET) {
+    while (GPIO_ReadInputDataBit(ULTRA_ECHO_GPIO_PORT, ULTRA_ECHO_PIN) == Bit_RESET) {
         if ((GetMicros() - start_time) > ULTRA_TIMEOUT_US) {
             return -2;
         }
@@ -381,7 +422,7 @@ int  Ultrasonic_ReadDistanceCm (void)
 
     echo_start = GetMicros();
 
-    while (GPIO_ReadInputDataBit(ULTRA_PORT, ULTRA_ECHO_PIN) == Bit_SET) {
+    while (GPIO_ReadInputDataBit(ULTRA_ECHO_GPIO_PORT, ULTRA_ECHO_PIN) == Bit_SET) {
         if ((GetMicros() - echo_start) > ULTRA_TIMEOUT_US) {
             return -3;
         }
@@ -406,6 +447,44 @@ int  IR_IsObstacleDetected (void)
     level = GPIO_ReadInputDataBit(IR_PORT, IR_PIN);
 
     if (level == IR_DETECTED_LEVEL) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
+*********************************************************************************************************
+*                                      BUTTON READ
+*********************************************************************************************************
+*/
+
+int  Button_ModeIsPressed (void)
+{
+    if (GPIO_ReadInputDataBit(BUTTON_MODE_GPIO_PORT,
+                              BUTTON_MODE_GPIO_PIN) == BUTTON_PRESSED_LEVEL) {
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int  Button_EmergencyIsPressed (void)
+{
+    if (GPIO_ReadInputDataBit(BUTTON_EMERGENCY_GPIO_PORT,
+                              BUTTON_EMERGENCY_GPIO_PIN) == BUTTON_PRESSED_LEVEL) {
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int  Button_ResetIsPressed (void)
+{
+    if (GPIO_ReadInputDataBit(BUTTON_RESET_GPIO_PORT,
+                              BUTTON_RESET_GPIO_PIN) == BUTTON_PRESSED_LEVEL) {
         return 1;
     }
 

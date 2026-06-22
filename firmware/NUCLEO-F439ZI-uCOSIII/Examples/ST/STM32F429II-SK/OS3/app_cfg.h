@@ -42,6 +42,8 @@
 
 #include "stm32f4xx_gpio.h"
 #include "stm32f4xx_adc.h"
+#include "stm32f4xx_rcc.h"
+#include "stm32f4xx_tim.h"
 
 /*
 *********************************************************************************************************
@@ -127,30 +129,75 @@
 #define  SENSOR_TASK_PERIOD_MS         100u
 #define  ULTRA_TIMEOUT_US              30000u
 
-/* HC-SR04 ultrasonic sensor */
-#define  ULTRA_PORT                    GPIOF
+/*
+ * HC-SR04 ultrasonic sensor
+ *
+ * TRIG -> D2 = PF15
+ * ECHO -> A5 = PF10
+ */
+#define  ULTRA_TRIG_GPIO_CLK           RCC_AHB1Periph_GPIOF
+#define  ULTRA_TRIG_GPIO_PORT          GPIOF
 #define  ULTRA_TRIG_PIN                GPIO_Pin_15
-#define  ULTRA_ECHO_PIN                GPIO_Pin_14
 
-/* IR obstacle sensor */
+#define  ULTRA_ECHO_GPIO_CLK           RCC_AHB1Periph_GPIOF
+#define  ULTRA_ECHO_GPIO_PORT          GPIOF
+#define  ULTRA_ECHO_PIN                GPIO_Pin_10
+
+/*
+ * IR obstacle sensor
+ *
+ * OUT -> D7 = PF13
+ */
+#define  IR_GPIO_CLK                   RCC_AHB1Periph_GPIOF
 #define  IR_PORT                       GPIOF
 #define  IR_PIN                        GPIO_Pin_13
 #define  IR_DETECTED_LEVEL             Bit_RESET
 
-/* Joystick ADC */
+/*
+ * Joystick ADC
+ *
+ * VRx -> A1 = PC0 = ADC Channel 10
+ * VRy -> A2 = PC3 = ADC Channel 13
+ */
+#define  JOY_ADC_GPIO_CLK              RCC_AHB1Periph_GPIOC
 #define  JOY_ADC_PORT                  GPIOC
 #define  JOY_VRX_PIN                   GPIO_Pin_0
 #define  JOY_VRY_PIN                   GPIO_Pin_3
 #define  JOY_VRX_ADC_CHANNEL           ADC_Channel_10
 #define  JOY_VRY_ADC_CHANNEL           ADC_Channel_13
 
-/*
- * 12-bit ADC range: 0 ~ 4095
- * Center value is usually around 2048.
- */
 #define  JOY_ADC_LOW_TH                1400u
 #define  JOY_ADC_HIGH_TH               2600u
 #define  JOY_STABLE_COUNT              2u
+
+
+/*
+*********************************************************************************************************
+*                                             BUTTON CONFIG
+*
+* Pull-up input:
+*   Not pressed = 1
+*   Pressed     = 0
+*********************************************************************************************************
+*/
+
+/* MODE button -> A0 = PA3 */
+#define  BUTTON_MODE_GPIO_CLK          RCC_AHB1Periph_GPIOA
+#define  BUTTON_MODE_GPIO_PORT         GPIOA
+#define  BUTTON_MODE_GPIO_PIN          GPIO_Pin_3
+
+/* EMERGENCY button -> A3 = PF3 */
+#define  BUTTON_EMERGENCY_GPIO_CLK     RCC_AHB1Periph_GPIOF
+#define  BUTTON_EMERGENCY_GPIO_PORT    GPIOF
+#define  BUTTON_EMERGENCY_GPIO_PIN     GPIO_Pin_3
+
+/* RESET button -> A4 = PF5 */
+#define  BUTTON_RESET_GPIO_CLK         RCC_AHB1Periph_GPIOF
+#define  BUTTON_RESET_GPIO_PORT        GPIOF
+#define  BUTTON_RESET_GPIO_PIN         GPIO_Pin_5
+
+#define  BUTTON_PRESSED_LEVEL          Bit_RESET
+
 
 /*
 *********************************************************************************************************
@@ -162,7 +209,7 @@
 #define  SERVO_CENTER_ANGLE            65
 #define  SERVO_RIGHT_ANGLE             135
 
-/* Servo PWM: Arduino D12 = PA6 = TIM3 CH1 */
+/* Servo PWM: D12 = PA6 = TIM3 CH1 */
 #define  SERVO_GPIO_PORT               GPIOA
 #define  SERVO_GPIO_PIN                GPIO_Pin_6
 #define  SERVO_GPIO_PIN_SOURCE         GPIO_PinSource6
@@ -173,18 +220,16 @@
 #define  SERVO_PULSE_MIN_US            500u
 #define  SERVO_PULSE_MAX_US            2500u
 
-/* Active buzzer: PE9, not connected yet */
+/* Active buzzer: D6 = PE9 */
 #define  BUZZER_GPIO_PORT              GPIOE
 #define  BUZZER_GPIO_PIN               GPIO_Pin_9
 
 /*
- * RGB LED module on Arduino digital header.
- * Common cathode type: R G B -
+ * RGB LED module
  *
- * R -> D3  = PE13
- * G -> D4  = PE14
- * B -> D5  = PE11
- * - -> GND
+ * R -> D3 = PE13
+ * G -> D4 = PF14
+ * B -> D5 = PE11
  */
 #define  RGB_RED_GPIO_PORT             GPIOE
 #define  RGB_RED_GPIO_PIN              GPIO_Pin_13
@@ -194,4 +239,5 @@
 
 #define  RGB_BLUE_GPIO_PORT            GPIOE
 #define  RGB_BLUE_GPIO_PIN             GPIO_Pin_11
+
 #endif

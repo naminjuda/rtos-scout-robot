@@ -224,6 +224,9 @@ CPU_BOOLEAN  App_RunStateMachineSelfTest (void)
     static const APP_SM_TEST_CASE  tests[] = {
         { STATE_IDLE,             EVT_CMD_AUTO,                 STATE_AUTO_MODE        },
         { STATE_IDLE,             EVT_CMD_MANUAL,               STATE_MANUAL_MODE      },
+        { STATE_IDLE,             EVT_CMD_MODE_TOGGLE,          STATE_MANUAL_MODE      },
+        { STATE_MANUAL_MODE,      EVT_CMD_MODE_TOGGLE,          STATE_AUTO_MODE        },
+        { STATE_AUTO_MODE,        EVT_CMD_MODE_TOGGLE,          STATE_MANUAL_MODE      },
         { STATE_AUTO_MODE,        EVT_SENSOR_OBSTACLE_WARN,     STATE_OBSTACLE_WARNING },
         { STATE_AUTO_MODE,        EVT_SENSOR_OBSTACLE_CRITICAL, STATE_AUTO_STOP        },
         { STATE_OBSTACLE_WARNING, EVT_IR_OBSTACLE,              STATE_AUTO_STOP        },
@@ -231,6 +234,7 @@ CPU_BOOLEAN  App_RunStateMachineSelfTest (void)
         { STATE_AUTO_STOP,        EVT_CMD_RESET,                STATE_IDLE             },
         { STATE_MANUAL_MODE,      EVT_EMERGENCY_STOP,           STATE_EMERGENCY_STOP   },
         { STATE_EMERGENCY_STOP,   EVT_CMD_FORWARD,              STATE_EMERGENCY_STOP   },
+        { STATE_EMERGENCY_STOP,   EVT_CMD_MODE_TOGGLE,          STATE_EMERGENCY_STOP   },
         { STATE_EMERGENCY_STOP,   EVT_CMD_RESET,                STATE_IDLE             }
     };
 
@@ -285,6 +289,25 @@ static  SystemState  App_NextState (SystemState state, EventType event)
         return (STATE_IDLE);
     }
 
+    if (event == EVT_CMD_MODE_TOGGLE) {
+        if (state == STATE_IDLE) {
+            return (STATE_MANUAL_MODE);
+        }
+
+        if (state == STATE_MANUAL_MODE) {
+            return (STATE_AUTO_MODE);
+        }
+
+        if ((state == STATE_AUTO_MODE) ||
+            (state == STATE_OBSTACLE_WARNING) ||
+            (state == STATE_AUTO_STOP) ||
+            (state == STATE_RECOVERY_WAIT)) {
+            return (STATE_MANUAL_MODE);
+        }
+
+        return (state);
+    }
+
     if (event == EVT_CMD_AUTO) {
         return (STATE_AUTO_MODE);
     }
@@ -296,7 +319,7 @@ static  SystemState  App_NextState (SystemState state, EventType event)
     switch (state) {
         case STATE_IDLE:
             /*
-             * AUTO / MANUAL / RESET are already handled above.
+             * AUTO / MANUAL / RESET / MODE_TOGGLE are already handled above.
              */
             break;
 
@@ -331,13 +354,13 @@ static  SystemState  App_NextState (SystemState state, EventType event)
 
         case STATE_AUTO_STOP:
             /*
-             * RESET / AUTO / MANUAL are already handled above.
+             * RESET / AUTO / MANUAL / MODE_TOGGLE are already handled above.
              */
             break;
 
         case STATE_RECOVERY_WAIT:
             /*
-             * RESET / AUTO / MANUAL are already handled above.
+             * RESET / AUTO / MANUAL / MODE_TOGGLE are already handled above.
              */
             break;
 
