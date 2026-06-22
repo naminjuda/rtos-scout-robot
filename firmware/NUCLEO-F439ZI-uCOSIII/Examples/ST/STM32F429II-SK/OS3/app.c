@@ -13,6 +13,7 @@
 #include  "stm32f4xx_rcc.h"
 #include  "stm32f4xx_gpio.h"
 #include  "stm32f4xx.h"
+#include  "button.h"
 
 /*
 *********************************************************************************************************
@@ -199,8 +200,27 @@ static  void  ControlTask (void *p_arg)
 
     while (DEF_TRUE) {
         App_WaitEvent(&event, &err);
+
         if (err == OS_ERR_NONE) {
             App_HandleEvent(&event);
+
+            /*
+             * Apply command output here so USART, joystick, and button events
+             * use the same output path.
+             */
+            switch (event.Type) {
+                case EVT_CMD_LEFT:
+                case EVT_CMD_RIGHT:
+                case EVT_CMD_CENTER:
+                case EVT_CMD_FORWARD:
+                case EVT_CMD_STOP:
+                case EVT_CMD_RESET:
+                    Command_ApplyManualOutput(event.Type);
+                    break;
+
+                default:
+                    break;
+            }
         }
     }
 }
@@ -298,7 +318,7 @@ static  void  OutputLogTask (void *p_arg)
 
 static  void  AppTaskCreate (void)
 {
-    OS_ERR    err;
+    OS_ERR      err;
     CPU_INT08U  i;
 
     for (i = 0u; i < APP_TASK_TBL_SIZE; i++) {
@@ -315,6 +335,14 @@ static  void  AppTaskCreate (void)
                      (void         *)0u,
                      (OS_OPT        )(OS_OPT_TASK_STK_CHK | OS_OPT_TASK_STK_CLR),
                      (OS_ERR       *)&err);
+    }
+
+    ButtonTaskCreate(&err);
+
+    if (err == OS_ERR_NONE) {
+        Log_Print("[TASK] ButtonTask created\r\n");
+    } else {
+        Log_Print("[TASK] ButtonTask create failed\r\n");
     }
 }
 
@@ -482,16 +510,14 @@ static  void  Command_HandleLine (char *line)
 
         return;
     }
-
     if (App_PostEvent(type, APP_EVENT_SRC_COMMAND, 0u) == DEF_OK) {
         Log_Print("[POST] ");
         Log_Print(Event_ToString(type));
         Log_Print("\r\n");
-
-        Command_ApplyManualOutput(type);
     } else {
         Log_Print("[POST] failed\r\n");
     }
+
 }
 
 static  void  Command_ApplyManualOutput (EventType type)
@@ -790,7 +816,7 @@ static  void  Joystick_PostManualCommand(void)
     g_last_joy_x = x;
     g_last_joy_y = y;
 
-/*
+
     state = App_GetState();
 
     if (state != STATE_MANUAL_MODE) {
@@ -799,7 +825,7 @@ static  void  Joystick_PostManualCommand(void)
         stable_count = 0u;
         return;
     }
-*/
+
 
     if (x < JOY_ADC_LOW_TH) {
         now_dir = JOY_DIR_LEFT;

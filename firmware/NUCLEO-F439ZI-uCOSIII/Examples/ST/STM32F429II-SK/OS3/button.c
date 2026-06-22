@@ -59,21 +59,27 @@ static  void  ButtonTask(void* p_arg)
          * Rising edge detection
          */
         if ((mode_now == 1) && (mode_prev == 0)) {
+            Log_Print("[BUTTON] mode toggle pressed\r\n");
+
             App_PostEvent(EVT_CMD_MODE_TOGGLE,
-                APP_EVENT_SRC_BUTTON,
-                0u);
+                        APP_EVENT_SRC_BUTTON,
+                        0u);
         }
 
         if ((emergency_now == 1) && (emergency_prev == 0)) {
-            App_PostEvent(EVT_EMERGENCY_STOP,
-                APP_EVENT_SRC_BUTTON,
-                0u);
+            Log_Print("[BUTTON] emergency pressed\r\n");
+
+            OSSemPost(App_GetEmergencySem(),
+                    OS_OPT_POST_1,
+                    &err);
         }
 
         if ((reset_now == 1) && (reset_prev == 0)) {
+            Log_Print("[BUTTON] reset pressed\r\n");
+
             App_PostEvent(EVT_CMD_RESET,
-                APP_EVENT_SRC_BUTTON,
-                0u);
+                        APP_EVENT_SRC_BUTTON,
+                        0u);
         }
 
         mode_prev = mode_now;

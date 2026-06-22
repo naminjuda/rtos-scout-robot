@@ -289,6 +289,10 @@ static  SystemState  App_NextState (SystemState state, EventType event)
         return (STATE_IDLE);
     }
 
+    if (event == EVT_CMD_CANCEL) {
+        return (STATE_IDLE);
+    }
+
     if (event == EVT_CMD_MODE_TOGGLE) {
         if (state == STATE_IDLE) {
             return (STATE_MANUAL_MODE);
