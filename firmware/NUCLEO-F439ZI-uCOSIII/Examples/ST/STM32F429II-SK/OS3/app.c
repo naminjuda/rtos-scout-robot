@@ -836,8 +836,13 @@ static  void  Joystick_PostManualCommand(void)
     else if (y > JOY_ADC_HIGH_TH) {
         now_dir = JOY_DIR_FORWARD;
     }
-    else {
+    else if (y < JOY_ADC_LOW_TH) {
         now_dir = JOY_DIR_CENTER;
+    }
+    else {
+        candidate_dir = last_dir;
+        stable_count = 0u;
+        return;
     }
 
     if (now_dir == candidate_dir) {
@@ -881,20 +886,11 @@ static  void  Joystick_PostManualCommand(void)
         Log_Print("[JOY] FORWARD -> EVT_CMD_FORWARD\r\n");
     }
     else {
-        if ((last_dir == JOY_DIR_LEFT) || (last_dir == JOY_DIR_RIGHT)) {
-            (void)App_PostEvent(EVT_CMD_CENTER,
-                APP_EVENT_SRC_COMMAND,
-                0u);
+        (void)App_PostEvent(EVT_CMD_CENTER,
+            APP_EVENT_SRC_COMMAND,
+            0u);
 
-            Log_Print("[JOY] CENTER -> EVT_CMD_CENTER\r\n");
-        }
-        else if (last_dir == JOY_DIR_FORWARD) {
-            (void)App_PostEvent(EVT_CMD_STOP,
-                APP_EVENT_SRC_COMMAND,
-                0u);
-
-            Log_Print("[JOY] RELEASE FORWARD -> EVT_CMD_STOP\r\n");
-        }
+        Log_Print("[JOY] CENTER -> EVT_CMD_CENTER\r\n");
     }
 
     last_dir = now_dir;
