@@ -61,6 +61,9 @@ static  uint16_t  ADC_ReadChannel     (uint8_t channel);
 
 static  void      UsartPutChar        (char c);
 
+static  void      Buzzer_On           (void);
+static  void      Buzzer_Off          (void);
+
 /*
 *********************************************************************************************************
 *                                             AppIO_Init()
@@ -519,6 +522,24 @@ static  void  RGB_BlueOn (void)
     GPIO_SetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
 }
 
+static  void  Buzzer_On (void)
+{
+    /*
+     * Active-low buzzer module:
+     * LOW = ON
+     */
+    GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+}
+
+static  void  Buzzer_Off (void)
+{
+    /*
+     * Active-low buzzer module:
+     * HIGH = OFF
+     */
+    GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+}
+
 static  void  OutputGPIO_Init (void)
 {
     GPIO_InitTypeDef  gpio_init;
@@ -554,6 +575,8 @@ static  void  OutputGPIO_Init (void)
     GPIO_ResetBits(RGB_GREEN_GPIO_PORT, RGB_GREEN_GPIO_PIN);
     GPIO_ResetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
     GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+
+    Buzzer_Off();
 }
 
 static  void  ServoPWM_Init (void)
@@ -715,46 +738,46 @@ void  Buzzer_SetState (SystemState state)
     switch (state) {
         case STATE_OBSTACLE_WARNING:
             /*
-             * Short beep: briefly ON once per cycle.
+             * Warning: very short beep.
              */
-            if ((tick % 10u) == 0u) {
-                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            if ((tick % 30u) == 0u) {
+                Buzzer_On();
             } else {
-                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+                Buzzer_Off();
             }
             break;
 
         case STATE_AUTO_STOP:
             /*
-             * Repeated beep.
+             * Auto stop: short intermittent beep.
              */
-            if ((tick % 6u) < 3u) {
-                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            if ((tick % 20u) == 0u) {
+                Buzzer_On();
             } else {
-                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+                Buzzer_Off();
             }
             break;
 
         case STATE_EMERGENCY_STOP:
             /*
-             * Continuous sound.
+             * Emergency stop: intermittent beep, not continuous.
              */
-            GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
-            break;
-
-        case STATE_RECOVERY_WAIT:
-            /*
-             * Optional short beep.
-             */
-            if ((tick % 20u) == 0u) {
-                GPIO_SetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            if ((tick % 10u) == 0u) {
+                Buzzer_On();
             } else {
-                GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+                Buzzer_Off();
             }
             break;
 
+        case STATE_RECOVERY_WAIT:
+            Buzzer_Off();
+            break;
+
         default:
-            GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
+            /*
+             * IDLE, MANUAL, AUTO, RESET state.
+             */
+            Buzzer_Off();
             break;
     }
 }
