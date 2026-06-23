@@ -695,7 +695,7 @@ static  void  Sensor_PostObstacleEvent (void)
 {
     int             distance;
     int             ir;
-    static int      last_zone = -1;
+    static int      last_ultra_zone = -1;
     static int      last_ir = -1;
     static CPU_INT16U timeout_count = 0u;
 
@@ -706,14 +706,35 @@ static  void  Sensor_PostObstacleEvent (void)
     g_last_ir_obstacle = ir;
 
     /*
-     * If HC-SR04 is not connected, timeout happens repeatedly.
-     * Do not spam USART logs.
+     * 1. IR은 초음파와 독립적으로 먼저 처리
+     * 초음파가 timeout이어도 IR 감지는 무조건 살아있어야 함
+     */
+    if (ir != last_ir) {
+        Log_PrintNum("[SENSOR] ir=", ir, "\r\n");
+        last_ir = ir;
+    }
+
+    if (ir == 1) {
+        Log_Print("[POST] EVT_IR_OBSTACLE\r\n");
+
+        (void)App_PostEvent(EVT_IR_OBSTACLE,
+                             APP_EVENT_SRC_SENSOR,
+                             0u);
+    }
+
+    /*
+     * 2. 초음파 timeout 처리
+     * 여기서 return해도 이미 위에서 IR 처리는 끝났음
      */
     if (distance < 0) {
         timeout_count++;
 
+        /*
+         * 초음파 timeout은 연결 끊김이 아닐 수도 있으니까
+         * 로그가 보기 싫으면 이 부분은 아예 주석 처리해도 됨
+         */
         if (timeout_count >= 50u) {
-            Log_Print("[SENSOR] ultrasonic timeout. HC-SR04 may be disconnected.\r\n");
+            Log_Print("[SENSOR] ultrasonic timeout. no echo detected.\r\n");
             timeout_count = 0u;
         }
 
@@ -723,54 +744,50 @@ static  void  Sensor_PostObstacleEvent (void)
     timeout_count = 0u;
 
     /*
+     * 3. 초음파 거리 기준 처리
      * zone:
      * 0 = clear
      * 1 = warning
      * 2 = critical
      */
     if (distance <= DIST_CRITICAL_CM) {
-        if (last_zone != 2) {
+        if (last_ultra_zone != 2) {
             Log_PrintNum("[SENSOR] distance=", distance, "cm, ");
             Log_PrintNum("ir=", ir, "\r\n");
             Log_Print("[POST] EVT_SENSOR_OBSTACLE_CRITICAL\r\n");
         }
 
-        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_CRITICAL, APP_EVENT_SRC_SENSOR, distance);
-        last_zone = 2;
+        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_CRITICAL,
+                             APP_EVENT_SRC_SENSOR,
+                             distance);
+
+        last_ultra_zone = 2;
     }
     else if (distance < DIST_WARN_CM) {
-        if (last_zone != 1) {
+        if (last_ultra_zone != 1) {
             Log_PrintNum("[SENSOR] distance=", distance, "cm, ");
             Log_PrintNum("ir=", ir, "\r\n");
             Log_Print("[POST] EVT_SENSOR_OBSTACLE_WARN\r\n");
         }
 
-        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_WARN, APP_EVENT_SRC_SENSOR, distance);
-        last_zone = 1;
+        (void)App_PostEvent(EVT_SENSOR_OBSTACLE_WARN,
+                             APP_EVENT_SRC_SENSOR,
+                             distance);
+
+        last_ultra_zone = 1;
     }
     else {
-        if (last_zone != 0) {
+        if (last_ultra_zone != 0) {
             Log_PrintNum("[SENSOR] distance=", distance, "cm, ");
             Log_PrintNum("ir=", ir, "\r\n");
             Log_Print("[POST] EVT_SENSOR_CLEAR\r\n");
         }
 
-        (void)App_PostEvent(EVT_SENSOR_CLEAR, APP_EVENT_SRC_SENSOR, distance);
-        last_zone = 0;
-    }
+        (void)App_PostEvent(EVT_SENSOR_CLEAR,
+                             APP_EVENT_SRC_SENSOR,
+                             distance);
 
-    if (ir != last_ir) {
-        Log_PrintNum("[SENSOR] ir=", ir, "\r\n");
-        last_ir = ir;
-    }
-
-    if (ir == 1) {
-        if (last_zone != 2) {
-            Log_Print("[POST] EVT_IR_OBSTACLE\r\n");
-        }
-
-        (void)App_PostEvent(EVT_IR_OBSTACLE, APP_EVENT_SRC_SENSOR, 0u);
-        last_zone = 2;
+        last_ultra_zone = 0;
     }
 }
 /*

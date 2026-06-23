@@ -574,7 +574,6 @@ static  void  OutputGPIO_Init (void)
     GPIO_ResetBits(RGB_RED_GPIO_PORT, RGB_RED_GPIO_PIN);
     GPIO_ResetBits(RGB_GREEN_GPIO_PORT, RGB_GREEN_GPIO_PIN);
     GPIO_ResetBits(RGB_BLUE_GPIO_PORT, RGB_BLUE_GPIO_PIN);
-    GPIO_ResetBits(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN);
 
     Buzzer_Off();
 }
@@ -740,7 +739,7 @@ void  Buzzer_SetState (SystemState state)
             /*
              * Warning: very short beep.
              */
-            if ((tick % 30u) == 0u) {
+            if ((tick % 15u) == 0u) {
                 Buzzer_On();
             } else {
                 Buzzer_Off();
@@ -751,7 +750,7 @@ void  Buzzer_SetState (SystemState state)
             /*
              * Auto stop: short intermittent beep.
              */
-            if ((tick % 20u) == 0u) {
+            if ((tick % 10u) == 0u) {
                 Buzzer_On();
             } else {
                 Buzzer_Off();
@@ -762,7 +761,7 @@ void  Buzzer_SetState (SystemState state)
             /*
              * Emergency stop: intermittent beep, not continuous.
              */
-            if ((tick % 10u) == 0u) {
+            if ((tick % 5u) == 0u) {
                 Buzzer_On();
             } else {
                 Buzzer_Off();
